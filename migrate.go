@@ -15,9 +15,9 @@ type Migratable interface {
 	AfterMigrate(db *gorm.DB) error
 }
 
-// ResetDB function will truncate and auto migrate all the tables.
+// ResetDB function will drop then auto migrate all the tables.
 func ResetDB(l log.Logger, db *gorm.DB, tables ...interface{}) error {
-	if err := Truncate(l, db, tables...); err != nil {
+	if err := Drop(l, db, tables...); err != nil {
 		return err
 	}
 
@@ -66,9 +66,9 @@ func AutoMigrate(l log.Logger, db *gorm.DB, tables ...interface{}) error {
 	return nil
 }
 
-// Truncate receives table arguments and truncate their content in database.
-func Truncate(l log.Logger, db *gorm.DB, tables ...interface{}) error {
-	l.Info().Log("msg", "running db truncation")
+// Drop receives tables arguments and drop them in database.
+func Drop(l log.Logger, db *gorm.DB, tables ...interface{}) error {
+	l.Info().Log("msg", "running db drop")
 	// We need to iterate throught the list in reverse order of
 	// creation, since later tables may have constraints or
 	// dependencies on earlier tables.
@@ -76,7 +76,7 @@ func Truncate(l log.Logger, db *gorm.DB, tables ...interface{}) error {
 	for i := range tables {
 		table := tables[len-i-1]
 		l.Debug().Log(
-			"msg", fmt.Sprintf("truncating %T", table),
+			"msg", fmt.Sprintf("drop table %T", table),
 			"table", fmt.Sprintf("%T", table),
 		)
 
@@ -84,12 +84,41 @@ func Truncate(l log.Logger, db *gorm.DB, tables ...interface{}) error {
 			l.Crit().Log(
 				"during", "db.DropTableIfExists",
 				"err", err,
-				"msg", fmt.Sprintf("error truncating table: %v", err),
+				"msg", fmt.Sprintf("error drop table: %v", err),
 			)
 			return err
 		}
 	}
 
-	l.Info().Log("msg", "db truncation complete")
+	l.Info().Log("msg", "db drop complete")
+	return nil
+}
+
+// Truncate receives tables arguments and truncate their content in database.
+func Truncate(l log.Logger, db *gorm.DB, tables ...interface{}) error {
+	l.Info().Log("msg", "running db truncate")
+	// We need to iterate throught the list in reverse order of
+	// creation, since later tables may have constraints or
+	// dependencies on earlier tables.
+	len := len(tables)
+	for i := range tables {
+		table := tables[len-i-1]
+		l.Debug().Log(
+			"msg", fmt.Sprintf("truncate table %T", table),
+			"table", fmt.Sprintf("%T", table),
+		)
+
+		err := db.Exec(`TRUNCATE TABLE ` + db.NewScope(table).QuotedTableName()).Error
+		if err != nil {
+			l.Crit().Log(
+				"during", "Truncate",
+				"err", err,
+				"msg", fmt.Sprintf("error truncate table: %v", err),
+			)
+			return err
+		}
+	}
+
+	l.Info().Log("msg", "db truncate complete")
 	return nil
 }
